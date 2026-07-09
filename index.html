@@ -274,6 +274,8 @@ setData(DATA);
 const tip = document.getElementById('tip');
 const fmt = n => n==null? "—" : n.toFixed(1);
 
+const nums=a=>a.filter(v=>typeof v==="number");
+const avgOf=a=>{const v=nums(a);return v.length?v.reduce((x,y)=>x+y,0)/v.length:0;};
 function band(p){
   if(p==null) return "var(--muted)";
   if(p<85) return "var(--under)";
@@ -321,7 +323,7 @@ let selected=null;
 function drawTrend(){
   const w=820,h=300,pad={l:42,r:14,t:14,b:34};
   const iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
-  let vals=[...T.pct]; if(selected) vals=vals.concat(L[selected].pct);
+  let vals=nums(T.pct); if(selected) vals=vals.concat(nums(L[selected].pct));
   vals.push(100);
   let ys=Math.floor((Math.min(...vals)-4)/5)*5;
   let ye=Math.ceil((Math.max(...vals)+4)/5)*5;
@@ -329,7 +331,8 @@ function drawTrend(){
   const step=(ye-ys)>45?10:5;
   const x=i=>pad.l+iw*i/(W.length-1);
   const y=v=>pad.t+ih*(1-(v-ys)/(ye-ys));
-  const path=arr=>arr.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)).join(' ');
+  const path=arr=>{let d='',pen=false;arr.forEach((v,i)=>{if(typeof v!=="number"){pen=false;return;}
+    d+=(pen?'L ':'M ')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' ';pen=true;});return d.trim();};
   let g='';
   for(let v=ys; v<=ye; v+=step){
     g+=`<line x1="${pad.l}" y1="${y(v)}" x2="${w-pad.r}" y2="${y(v)}" stroke="var(--grid)"/>
@@ -345,7 +348,7 @@ function drawTrend(){
   if(selected){
     const a=L[selected].pct;
     g+=`<path d="${path(a)}" fill="none" stroke="var(--maroon)" stroke-width="2"/>`;
-    a.forEach((v,i)=>{ g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="var(--maroon)"
+    a.forEach((v,i)=>{ if(typeof v!=="number")return; g+=`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="var(--maroon)"
       data-s="1" data-i="${i}" data-v="${v}" style="cursor:pointer"/>`;});
   }
   // total line
@@ -377,7 +380,7 @@ function renderTrend(){
 
 /* ---------- Ranking ---------- */
 function renderRanking(){
-  const rows=names.map(n=>{const a=L[n].pct;return {n,avg:a.reduce((x,y)=>x+y,0)/a.length};})
+  const rows=names.map(n=>({n,avg:avgOf(L[n].pct)}))
     .sort((a,b)=>b.avg-a.avg);
   const cap=Math.max(115, ...rows.map(r=>r.avg));
   document.getElementById('ranking').innerHTML = rows.map(r=>{
@@ -400,13 +403,14 @@ function renderInsights(){
        <div><b>${i.h}</b> — ${i.b}</div></div>`).join('');
     return;
   }
-  const avg=n=>{const a=L[n].pct;return a.reduce((x,y)=>x+y,0)/a.length;};
+  const avg=n=>avgOf(L[n].pct);
   const ranked=names.map(n=>({n,a:avg(n),last:L[n].pct.at(-1)})).sort((x,y)=>x.a-y.a);
   const low=ranked[0], top=ranked[ranked.length-1];
   // most volatile (range)
-  const vol=names.map(n=>{const a=L[n].pct;return{n,r:Math.max(...a)-Math.min(...a)};}).sort((x,y)=>y.r-x.r)[0];
+  const vol=names.map(n=>{const v=nums(L[n].pct);return{n,r:v.length?Math.max(...v)-Math.min(...v):0};}).sort((x,y)=>y.r-x.r)[0];
   // biggest weekly swing last week
-  const movers=names.map(n=>({n,d:L[n].pct.at(-1)-L[n].pct.at(-2)}));
+  const movers=names.map(n=>{const p=L[n].pct,x1=p.at(-1),x0=p.at(-2);
+    return{n,d:(typeof x1==="number"&&typeof x0==="number")?x1-x0:0};});
   const drop=[...movers].sort((x,y)=>x.d-y.d)[0];
   const rise=[...movers].sort((x,y)=>y.d-x.d)[0];
   const items=[
@@ -430,7 +434,8 @@ function renderHeatmap(){
     .sort((x,y)=>x.a-y.a).map(o=>o.n);
   order.forEach(n=>{
     h+=`<tr><td class="loc">${n}</td>`+
-      L[n].pct.map((p,i)=>`<td style="background:${band(p)}" data-n="${n}" data-i="${i}" data-p="${p}">${Math.round(p)}</td>`).join('')+'</tr>';
+      L[n].pct.map((p,i)=> p==null ? `<td style="background:var(--grid)"></td>`
+        : `<td style="background:${band(p)}" data-n="${n}" data-i="${i}" data-p="${p}">${Math.round(p)}</td>`).join('')+'</tr>';
   });
   h+=`<tr><td class="loc" style="font-weight:800;color:var(--navy)">Network</td>`+
      T.pct.map((p,i)=>`<td style="background:var(--navy);font-weight:800" data-n="Network" data-i="${i}" data-p="${p}">${Math.round(p)}</td>`).join('')+'</tr>';
@@ -447,7 +452,8 @@ function renderLatest(){
   const li=W.length-1;
   let rows=names.map(n=>{
     const o=L[n];
-    return {n,b:o.budget,h:o.hours[li],p:o.pct[li],d:o.pct[li]-o.pct[li-1]};
+    const p=o.pct[li], prev=o.pct[li-1];
+    return {n,b:o.budget,h:o.hours[li],p,d:(typeof p==="number"&&typeof prev==="number")?p-prev:null};
   });
   let sortKey='p',asc=true;
   function render(){
@@ -456,9 +462,9 @@ function renderLatest(){
     let t='<table class="dt"><thead><tr>'+head.map(([k,lab])=>
       `<th data-k="${k}">${lab}${sortKey===k?` <span class="ar">${asc?'▲':'▼'}</span>`:''}</th>`).join('')+'</tr></thead><tbody>';
     rows.forEach(r=>{
-      t+=`<tr><td>${r.n}</td><td>${fmt(r.b)}</td><td>${fmt(r.h)}</td>
-        <td><span class="pill" style="background:${band(r.p)}">${r.p.toFixed(1)}%</span></td>
-        <td class="${r.d>=0?'delta-pos':'delta-neg'}">${r.d>=0?'+':''}${r.d.toFixed(1)}</td></tr>`;
+      t+=`<tr><td>${r.n}</td><td>${r.b==null?'—':fmt(r.b)}</td><td>${r.h==null?'—':fmt(r.h)}</td>
+        <td><span class="pill" style="background:${band(r.p)}">${typeof r.p==="number"?r.p.toFixed(1)+'%':'—'}</span></td>
+        <td class="${r.d==null?'':(r.d>=0?'delta-pos':'delta-neg')}">${r.d==null?'—':(r.d>=0?'+':'')+r.d.toFixed(1)}</td></tr>`;
     });
     // total
     t+=`<tr style="border-top:2px solid var(--navy)"><td style="font-weight:800;color:var(--navy)">Network</td>
