@@ -131,9 +131,25 @@
     table.hm th.loc,table.hm td.loc{font-size:9px}
     .hm-scroll{overflow:visible}
     header.top{break-after:avoid;padding-top:0}
-  }
-</style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  }  .chatwrap{margin-top:18px;border-top:1px solid var(--line);padding-top:14px;display:none}
+  .chatwrap .chattitle{font-size:13px;font-weight:800;color:var(--navy);letter-spacing:.02em;margin-bottom:2px}
+  .chatwrap .chatcap{font-size:12px;color:var(--muted);margin:0 0 10px}
+  .chatlog{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+  .chatlog:empty{display:none}
+  .msg{font-size:13px;line-height:1.45;padding:8px 11px;border-radius:10px;max-width:92%}
+  .msg.q{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:3px}
+  .msg.a{align-self:flex-start;background:#f4f2ee;color:var(--ink);border:1px solid var(--line);border-bottom-left-radius:3px}
+  .msg.a.err{color:var(--maroon)}
+  .chatrow{display:flex;gap:8px}
+  .chatrow input{flex:1;font:inherit;font-size:13px;padding:9px 12px;border:1px solid var(--line);
+    border-radius:9px;background:#fbfaf7;color:var(--ink);outline:none}
+  .chatrow input:focus{border-color:var(--navy-2)}
+  .chatrow input::placeholder{color:#a8b0bd;font-style:italic}
+  .chatrow button{font:inherit;font-size:13px;font-weight:700;padding:9px 16px;border:0;border-radius:9px;
+    background:var(--navy);color:#fff;cursor:pointer}
+  .chatrow button:hover{background:var(--navy-2)}
+  .chatrow button:disabled{opacity:.5;cursor:default}
+</style><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style type="text/css" nonce="">
 .redacted {
   color: red !important;
@@ -195,6 +211,15 @@
       <h2>What stands out</h2>
       <p class="cap">Auto-generated from the latest data.</p>
       <div id="insights"></div>
+      <div class="chatwrap" id="chatwrap">
+        <div class="chattitle">Ask about the data</div>
+        <p class="chatcap">Short questions, short answers — based only on the staffing numbers shown here.</p>
+        <div class="chatlog" id="chatlog"></div>
+        <div class="chatrow">
+          <input id="chatq" maxlength="200" autocomplete="off" placeholder="e.g. How many weeks were we staffed at exactly 90%?">
+          <button id="chatsend">Ask</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -430,6 +455,57 @@ function renderAll(){
   renderKPIs(); renderTrend(); renderRanking();
   renderInsights(); renderHeatmap(); renderLatest();
 }
+
+/* ---- Ask-about-the-data chat ---------------------------------------------
+   Paste your Cloudflare Worker URL between the quotes below. While it's empty,
+   the chat stays hidden and the dashboard behaves exactly as before.        */
+const CHAT_ENDPOINT = "https://empire-chat.yankyf.workers.dev";
+
+(function initChat(){
+  if(!CHAT_ENDPOINT) return;
+  const wrap = document.getElementById('chatwrap');
+  const log  = document.getElementById('chatlog');
+  const box  = document.getElementById('chatq');
+  const btn  = document.getElementById('chatsend');
+  wrap.style.display = "block";
+  const hist = [];
+
+  function add(cls, text){
+    const d = document.createElement('div');
+    d.className = "msg " + cls;
+    d.textContent = text;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+    return d;
+  }
+
+  async function send(){
+    const q = box.value.trim();
+    if(!q) return;
+    box.value = ""; box.disabled = true; btn.disabled = true;
+    add("q", q);
+    const wait = add("a", "…");
+    try{
+      const r = await fetch(CHAT_ENDPOINT, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({question: q, history: hist.slice(-6)})
+      });
+      const j = await r.json();
+      if(!r.ok || !j.answer) throw new Error(j.error || "no answer");
+      wait.textContent = j.answer;
+      hist.push({role:"user", content:q}, {role:"assistant", content:j.answer});
+    }catch(e){
+      wait.textContent = "Sorry — the assistant isn't available right now. Please try again in a minute.";
+      wait.classList.add("err");
+    }finally{
+      box.disabled = false; btn.disabled = false; box.focus();
+    }
+  }
+
+  btn.addEventListener("click", send);
+  box.addEventListener("keydown", e => { if(e.key === "Enter") send(); });
+})();
 
 /* ---- Live data boot: pull the latest data.json, fall back to the built-in snapshot ---- */
 (function boot(){
