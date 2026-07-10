@@ -564,19 +564,39 @@ const CHAT_ENDPOINT = "https://empire-chat.yankyf.workers.dev";
   box.addEventListener("keydown", e => { if(e.key === "Enter") send(); });
 })();
 
-/* ---- Live data boot: pull the latest data.json, fall back to the built-in snapshot ---- */
-(function boot(){
-  var url = "data.json?t=" + Date.now();   // cache-buster so a fresh week shows immediately
-  fetch(url, {cache:"no-store"})
-    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-    .then(function(json){ setData(json); renderAll(); })
-    .catch(function(err){
-      console.warn("Live data unavailable, showing built-in snapshot:", err);
-      renderAll();
-      var meta = document.getElementById('weekMeta');
-      if(meta){ meta.textContent += " \u00b7 offline snapshot"; }
-    });
+/* ---- Live data boot: retry through deploy gaps, refresh stale tabs automatically ---- */
+let lastLoadOk = 0;
+async function loadLive(retries){
+  for(let a = 0; a <= retries; a++){
+    try{
+      const r = await fetch("data.json?t=" + Date.now(), {cache:"no-store"});
+      if(!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      setData(j); renderAll(); lastLoadOk = Date.now();
+      return true;
+    }catch(e){
+      if(a < retries) await new Promise(res => setTimeout(res, 1500 * (a + 1)));
+      else console.warn("Live data unavailable:", e);
+    }
+  }
+  return false;
+}
+(async function boot(){
+  const ok = await loadLive(3);   // ~9s of patience covers a GitHub Pages redeploy
+  if(!ok){
+    renderAll();
+    const meta = document.getElementById('weekMeta');
+    if(meta){ meta.textContent += " \u00b7 offline snapshot"; }
+  }
 })();
+// a tab that wakes up after sitting idle re-fetches on its own,
+// and long-open tabs refresh themselves every 15 minutes
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "visible" && Date.now() - lastLoadOk > 60000) loadLive(1);
+});
+setInterval(() => {
+  if(document.visibilityState === "visible" && Date.now() - lastLoadOk > 15 * 60000) loadLive(0);
+}, 60000);
 
 /* ---------- Toast ---------- */
 let toastTimer;
