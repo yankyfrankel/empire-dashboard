@@ -539,7 +539,7 @@ const CHAT_ENDPOINT = "https://empire-chat.yankyf.workers.dev";
     box.value = ""; box.disabled = true; btn.disabled = true;
     add("q", q);
     const wait = add("a", "…");
-    try{
+    const askServer = async () => {
       const r = await fetch(CHAT_ENDPOINT, {
         method: "POST",
         headers: {"Content-Type":"application/json"},
@@ -547,6 +547,16 @@ const CHAT_ENDPOINT = "https://empire-chat.yankyf.workers.dev";
       });
       const j = await r.json();
       if(!r.ok || !j.answer) throw new Error(j.error || "no answer");
+      return j;
+    };
+    try{
+      let j;
+      try{ j = await askServer(); }
+      catch(e1){
+        console.error("chat attempt 1 failed, retrying:", e1);
+        await new Promise(res => setTimeout(res, 1200));
+        j = await askServer();
+      }
       wait.textContent = j.answer;
       if(j.table) wait.appendChild(buildTable(j.table));
       log.scrollTop = log.scrollHeight;
