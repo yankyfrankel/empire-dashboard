@@ -84,13 +84,13 @@
   .hm-scroll{overflow-x:auto}
   #latest{overflow-x:auto}
   #latest table.dt{min-width:540px}
-  table.hm{border-collapse:collapse;font-size:11px;width:100%;min-width:760px}
+  table.hm{border-collapse:separate;border-spacing:0;font-size:11px;width:100%;min-width:760px}
   table.hm th{font-weight:700;color:var(--muted);font-size:10px;padding:5px 3px;text-align:center;
     white-space:nowrap}
   table.hm th.loc,table.hm td.loc{text-align:left;padding-right:10px;color:var(--ink);
-    font-weight:600;font-size:11.5px;white-space:nowrap;position:sticky;left:0;background:var(--card);z-index:2}
+    font-weight:600;font-size:11.5px;white-space:nowrap;position:sticky;left:0;background:var(--card);z-index:2;box-shadow:2px 0 0 var(--card)}
   table.hm td{width:30px;height:24px;text-align:center;color:#fff;font-weight:600;
-    font-variant-numeric:tabular-nums;border:2px solid var(--card);border-radius:4px}
+    font-variant-numeric:tabular-nums;border:1px solid var(--card);border-radius:4px}
   /* table */
   table.dt{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
   table.dt th{text-align:right;padding:9px 10px;border-bottom:2px solid var(--navy);
@@ -429,9 +429,8 @@ function renderInsights(){
 function renderHeatmap(){
   let h='<table class="hm"><thead><tr><th class="loc">Facility</th>'+
     W.map(w=>`<th>${w}</th>`).join('')+'</tr></thead><tbody>';
-  // order by avg ascending so trouble sits up top
-  const order=names.map(n=>{const a=L[n].pct;return{n,a:a.reduce((x,y)=>x+y,0)/a.length};})
-    .sort((x,y)=>x.a-y.a).map(o=>o.n);
+  // alphabetical order (Network row stays pinned at the bottom)
+  const order=[...names].sort((a,b)=>a.localeCompare(b));
   order.forEach(n=>{
     h+=`<tr><td class="loc">${n}</td>`+
       L[n].pct.map((p,i)=> p==null ? `<td style="background:var(--grid)"></td>`
